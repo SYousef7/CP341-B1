@@ -5,6 +5,10 @@ let extinguished = 0;
 let player;
 let port;
 let isConnected = false;
+let firetick = 0;
+let firetickspeed = 200; //tweak as necessary. smaller number = harder
+                         //MUST BE EVEN
+let canex;
 
 // micro:bit inputs (declare & init!)
 let p0 = 0;  // digital 0/1 from P0
@@ -87,6 +91,10 @@ function draw() {
   noStroke();
 
   // Fires & extinguish check
+  firetick = firetick + 1;
+  if(firetick==firetickspeed){
+    firetick=0;
+  }
   for (let i = fires.length - 1; i >= 0; i--) {
     const f = fires[i];
 
@@ -97,9 +105,40 @@ function draw() {
     // collision radius tuned up for emoji
     const near = dist(player.x, player.y, f.pos.x, f.pos.y) < f.size * 0.6;
 
-    if (near && canExtinguish(f.type)) {
-      fires.splice(i, 1);
-      extinguished++;
+    canex = canExtinguish(f.type)
+    if(near && canex=="s"){ 
+      fires.push({ pos: createVector(random(f.pos.x-20, f.pos.x+20), random(f.pos.y-20, f.pos.y+20)), size: 20, type: "small"});
+    }
+    else if (near && canex) {
+      f.size = f.size - 1
+      //reclassify size or delete
+      if(f.size<15){
+          fires.splice(i, 1);
+        extinguished++;
+      }
+      else if(f.size<21){
+        f.type = "small"
+      }
+      else if(f.size<36){
+        f.type = "medium"
+      }
+      
+    }
+    
+    // random spreading
+    if(f.type == "large" && firetick == 0) {
+      fires.push({ pos: createVector(random(f.pos.x-20, f.pos.x+20), random(f.pos.y-20, f.pos.y+20)), size: 20, type: "small"  })
+    }
+
+    //fire growth
+    if(f.type!="large" && firetick == (firetickspeed/2)){ //make fire bigger
+      f.size = f.size + 1
+    }
+    if(f.size>49){ //reclassify size
+      f.type = "large";
+    }
+    else if(f.size>34){
+      f.type = "medium";
     }
   }
 
@@ -134,6 +173,7 @@ function canExtinguish(type) {
   const P1 = (p1 === 1);
   const SHOCK = (s > 200); // tweak as needed
 
+  if (type === "large" && SHOCK || type === "medium" && SHOCK) return "s"
   if (type === "small")  return P0 || SHOCK;            // spray or shake
   if (type === "medium") return P1 || (P0 && P1);       // bigger tool or combo
   if (type === "large")  return (P0 && P1);             // require both pressed
