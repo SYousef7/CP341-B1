@@ -38,6 +38,9 @@
       text-align: center; 
       color: #3F2A2B; /* deep green text */
     }
+    #gamePage{
+      background-image: url('static/images/Background.jpg');
+    }
     .content {
       background:#d8808051;
       height: 100vh;
@@ -78,7 +81,7 @@
   <!-- your sketch -->
   <script src="{{ url_for('static', filename='js/sketch.js') }}"></script>
   <!-- ml5.js -->
-  <script src="https://unpkg.com/ml5@1/dist/ml5.js"></script>
+  <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
 
 </head>
 <body>
@@ -90,7 +93,7 @@
       style="width: 900px;">
       </div>
       <div class="startButton" style = "grid-row: 3;">
-      <button onclick="showPage('menuPage')" style = "font-size: 50px;"  >Start</button>
+      <button onclick="showPage('menuPage'), connect()" style = "font-size: 50px;"  >Start</button>
       </div>
     </div>
   </div>
@@ -118,16 +121,13 @@
   <div id="mapPage" class="page">
     <h1>Select a Forest</h1>
     <button onclick="startGame('Amazon Rain Forest')">🌳 Amazon Rain Forest</button>
-    <button onclick="startGame('Congo Rain Forest')">🌴 Congo Rain Forest</button>
-    <button onclick="startGame('Taiga Forest')">🌲 Taiga Forest</button>
+
     <button onclick="goBack()">⬅ Back</button>
   </div>
 
   <!-- Game Page -->
   <div id="gamePage" class="page">
-    <h2 id="mapName"></h2>
     <div id="p5host"></div>
-    <button onclick="goBack()">⬅ Back</button>
   </div>
 
   <script>
@@ -155,8 +155,8 @@
     }
 
     function startGame(map) {
-      window.selectedMap = map;
-      document.getElementById("mapName").textContent = "Map: " + map;
+      //window.selectedMap = map;
+      //document.getElementById("mapName").textContent = "Map: " + map;
       showPage('gamePage');
 
       // Remove old game if it exists
