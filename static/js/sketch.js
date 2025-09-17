@@ -15,6 +15,16 @@ let firetickspeed = 200; //tweak as necessary. smaller number = harder
 let scorched = false; 
 let canex;
 
+let classifier;
+let words = [
+  "up",
+  "down",
+  "left",
+  "right",
+];
+let predictedWord = "";
+
+
 const LIFE_TICKS = {
   small:  6400*(firetickspeed/50),   // ~ lifespan for small fires
   medium: 3200*(firetickspeed/50),  // ~ lifespan for medium fires
@@ -28,142 +38,12 @@ let s  = 0;  // sound
 
 let backgroundImage;
 
-// ====== Custom Keyword Weather (Teachable Machine Audio) ======
-let tmSpeech, tmReady = false;
-let predLabel = '…', predConf = 0;
-const TM_AUDIO_MODEL_URL = 'https://teachablemachine.withgoogle.com/models/VmfcP80Jk/';
-
-// smoothing / debouncing helpers
-let lastStable = '', stableSince = 0;
-const HOLD_MS = 400;           // label must persist this long
-const CONF_THRESHOLD = 0.85;   // min confidence to accept
-
-const WEATHER = Object.freeze({
-  NONE: 'none',
-  DRIZZLE: 'drizzle',
-  RAIN: 'rain',
-  FLOOD: 'flood',
-  DROUGHT: 'drought'
-});
-
-let weather = { state: WEATHER.NONE, fireSpreadMultiplier: 1.0, fuelMoisture: 1.0, waterLevel: 0 };
-
-async function initCustomSpeech() {
-  console.log("🎤 Initializing audio recognition...");
-  
-  try {
-    // Request microphone permission first
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-    console.log("✅ Microphone permission granted");
-    
-    // Create audio context
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    
-    const options = {
-      probabilityThreshold: 0.0,
-      overlapFactor: 0.5
-    };
-    
-    tmSpeech = ml5.soundClassifier(TM_AUDIO_MODEL_URL, options, modelLoaded);
-    
-  } catch (error) {
-    console.error("❌ Error initializing audio:", error);
-    console.log("🔧 Try clicking anywhere to enable audio, then press 'M' to start listening");
-  }
-}
-
-function modelLoaded() {
-  console.log("Model loaded successfully!");
-  tmReady = true;
-  tmSpeech.classify(onAudioPrediction);
-}
-
-function onAudioPrediction(err, results){
-  if (err || !results?.[0]) return;
-  
-  predLabel = results[0].label.toLowerCase();
-  predConf  = results[0].confidence || 0;
-  
-  // DEBUG: This line will show you everything the AI is hearing
-  console.log(`Heard: "${predLabel}" with confidence: ${predConf.toFixed(2)}`);
-
-  // Ignore low confidence
-  if (predConf < CONF_THRESHOLD) return;
-
-  // Ignore neutral/background
-  if (predLabel.includes('neutral') || predLabel.includes('background')) return;
-
-  // Debounce: require same label to persist for HOLD_MS
-  const now = millis();
-  if (predLabel !== lastStable){
-    lastStable = predLabel;
-    stableSince = now;
-  } else if (now - stableSince >= HOLD_MS){
-    console.log(`COMMAND TRIGGERED: ${predLabel}`); // DEBUG: Shows when commands actually trigger
-    handleKeyword(predLabel);
-    // reset so we don't spam the same action continuously
-    lastStable = '';
-    stableSince = now;
-  }
-}
-
-function handleKeyword(label){
-  // Map your TM labels → weather states
-  if (label === 'drizzle')       setWeather(WEATHER.DRIZZLE);
-  else if (label === 'rain')     setWeather(WEATHER.RAIN);
-  else if (label === 'flood')    setWeather(WEATHER.FLOOD);
-  else if (label === 'drought')  setWeather(WEATHER.DROUGHT);
-  else if (label === 'stop' || label === 'neutral' || label === 'background')
-    setWeather(WEATHER.NONE);
-}
-
-function setWeather(state){
-  weather.state = state;
-  weather.fireSpreadMultiplier = 1.0;
-  weather.fuelMoisture = 1.0;
-
-  switch(state){
-    case WEATHER.DRIZZLE:
-      weather.fireSpreadMultiplier = 0.9;
-      weather.fuelMoisture = 1.1;
-      weather.waterLevel = lerp(weather.waterLevel, 0.1, 0.5);
-      flashBanner('🌦️ Drizzling');
-      break;
-    case WEATHER.RAIN:
-      weather.fireSpreadMultiplier = 0.75;
-      weather.fuelMoisture = 1.3;
-      weather.waterLevel = lerp(weather.waterLevel, 0.25, 0.5);
-      flashBanner('🌧️ Raining');
-      break;
-    case WEATHER.FLOOD:
-      weather.fireSpreadMultiplier = 0.55;
-      weather.fuelMoisture = 1.6;
-      weather.waterLevel = lerp(weather.waterLevel, 0.55, 0.5);
-      flashBanner('🌊 Flooding');
-      break;
-    case WEATHER.DROUGHT:
-      weather.fireSpreadMultiplier = 1.4;
-      weather.fuelMoisture = 0.75;
-      weather.waterLevel = lerp(weather.waterLevel, 0.0, 0.5);
-      flashBanner('☀️ Drought');
-      break;
-    default:
-      weather.waterLevel = lerp(weather.waterLevel, 0.0, 0.5);
-      flashBanner('⛅ Normal');
-  }
-}
-
-// --- optional UI helpers (banner, overlays) same as before ---
-let bannerText = '', bannerUntil = 0;
-function flashBanner(t, ms=1100){ bannerText = t; bannerUntil = millis() + ms; }
-function drawBanner(){
-  if (millis() > bannerUntil) return;
-  push(); noStroke(); fill(0,180); rect(10,10,width-20,44,8);
-  fill(255); textAlign(CENTER,CENTER); textSize(18); text(bannerText, width/2, 32); pop();
-}
-
 function preload() {
   backgroundImage = loadImage('static/images/Background.jpg');
+  // Options for the SpeechCommands18w model, the default probabilityThreshold is 0
+  let options = { probabilityThreshold: 0.7 };
+  // Load SpeechCommands18w sound classifier model
+  classifier = ml5.soundClassifier("SpeechCommands18w", options);
 }
 
 // ---- MICROBIT SERIAL CONNECTION ----
@@ -217,8 +97,10 @@ function parseData(data){
 
 // ---- P5.JS GAME ----
 function setup() {
-  const canvas = createCanvas(window.innerWidth, window.innerHeight);
+  const canvas = createCanvas(windowWidth, windowHeight);
   canvas.parent("p5host");
+
+  classifier.classifyStart(gotResult);
 
   player = createVector(width / 2, height / 2);
 
@@ -256,8 +138,6 @@ function setup() {
 
   textAlign(CENTER, CENTER);
   textSize(16);
-
-  initCustomSpeech();
 }
 
 function draw() {
@@ -369,17 +249,11 @@ function draw() {
     else if (f.type == "large" && f.fireLife == 5){
       f.type = "scorched";
     }
-
-    // Weather effect on fire tick (only calculate once per frame)
-    if (i === fires.length - 1) {
-      const baseTick = 200; // your normal baseline
-      window.effectiveFireTick = baseTick / weather.fireSpreadMultiplier;
-    }
   }
 
+  soundMovement();
   clearSmoke();
   updateAndDrawParticles();
-  drawBanner();
 
   // Player
   fill(30, 144, 255);
@@ -394,7 +268,7 @@ function draw() {
   // Debug HUD for inputs
   textSize(12);
   text(
-    `micro:bit → P0:${p0}  P1:${p1}  S:${s}  ${isConnected ? '🟢 connected' : '🔴 not connected'}`,
+    `micro:bit → P0:${p0}  P1:${p1}  S:${s}  ${isConnected ? '🟢 connected' : '🔴 not connected'} word:${predictedWord}`,
     width / 2, height - 14
   );
 
@@ -502,6 +376,14 @@ function clearSmoke(){
   }
 }
 
+function soundMovement() {
+  const step = 0.5;
+  if (predictedWord === "left")  player.x = max(0, player.x - step);
+  if (predictedWord === "right") player.x = min(width, player.x + step);
+  if (predictedWord === "up")    player.y = max(0, player.y - step);
+  if (predictedWord === "down")  player.y = min(height, player.y + step);
+}
+
 // ---- Fallback keyboard movement ----
 function keyPressed() {
   const step = 15;
@@ -520,4 +402,11 @@ function keyReleased(){
   if (key === 'z' || key === 'Z') p0 = 0;
   if (key === 'x' || key === 'X') p1 = 0;
   if (key === 's' || key === 'S') s  = 0;
+}
+
+function gotResult(results) {
+  // The results are in an array ordered by confidence
+  console.log(results);
+  // Load the first label to the text variable displayed on the canvas
+  predictedWord = results[0].label;
 }
