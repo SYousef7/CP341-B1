@@ -10,7 +10,7 @@ let port;
 let isConnected = false;
 let fireLife = 0;
 let firetick = 0;
-let firetickspeed = 200; //tweak as necessary. smaller number = harder
+let firetickspeed = 500; //tweak as necessary. smaller number = harder
                          //MUST BE EVEN
 let scorched = false; 
 let canex;
@@ -41,7 +41,7 @@ let backgroundImage;
 function preload() {
   backgroundImage = loadImage('static/images/Background.jpg');
   // Options for the SpeechCommands18w model, the default probabilityThreshold is 0
-  let options = { probabilityThreshold: 0.7 };
+  let options = { probabilityThreshold: 0.95 };
   // Load SpeechCommands18w sound classifier model
   classifier = ml5.soundClassifier("SpeechCommands18w", options);
 }
